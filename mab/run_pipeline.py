@@ -31,6 +31,7 @@ import concurrent.futures
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -105,6 +106,27 @@ def _listing(mrn: str) -> str:
     return "\n".join(f"{when}  {text}" for when, text in rows) or "none"
 
 
+def chart_results(mrn: str, code: str) -> list[tuple[str, str]]:
+    """Read back (specimen date, value) for one lab code, following the server's pages, newest first."""
+    url = f"{m.API_BASE}Observation?patient={mrn}&code={code}&_count=200&_format=json"
+    rows = []
+    while url:
+        data = json.loads(m.GRADER.send_get_request(url)["data"])
+        for entry in data.get("entry", []):
+            r = entry["resource"]
+            when = r.get("effectiveDateTime")
+            if when and datetime.fromisoformat(when) <= m.NOW:
+                q = r.get("valueQuantity") or {}
+                rows.append((when, f"{q.get('value', r.get('valueString', ''))} {q.get('unit', '')}".strip()))
+        url = next((x["url"] for x in data.get("link", []) if x["relation"] == "next"), None)
+    return sorted(rows, reverse=True)
+
+
+def _lab_listing(mrn: str, code: str) -> str:
+    rows = chart_results(mrn, code)[:100]
+    return "\n".join(f"{when}  {code} {value}" for when, value in rows) or "none"
+
+
 def _clean(text: str) -> str:
     return text.strip().replace("```tool_code", "").replace("```", "").strip()
 
@@ -140,7 +162,12 @@ class Pipeline:
         if self.handoff == "full":
             text += "\n\nRecords the reader retrieved:\n" + ("\n".join(self.raw) or "none")
         if (self.handoff == "rb_writer" and for_writer) or (self.handoff == "rb_verifier" and not for_writer):
-            text += "\n\nMedication orders read from the chart, newest first:\n" + _listing(self.case["eval_MRN"])
+            if self.case.get("kind") == "labdup":
+                code = self.case["lab_code"]
+                text += (f"\n\nLab results for {code} read from the chart, newest first (specimen date, value):\n"
+                         + _lab_listing(self.case["eval_MRN"], code))
+            else:
+                text += "\n\nMedication orders read from the chart, newest first:\n" + _listing(self.case["eval_MRN"])
         return text[: m.AUDITOR_MAX_CHARS]
 
     # -- record actions -------------------------------------------------------------------
@@ -269,6 +296,15 @@ class Pipeline:
             t["prior_order"] = prior[0] if prior else None
             t["retrieved"] = med in raw and bool(prior) and prior[0][:10] in raw
             t["retained"] = bool(prior) and med.split()[0] in reports and prior[0][:10] in reports
+        elif self.case.get("kind") == "labdup":
+            code = self.case["lab_code"]
+            prior = [w for w, _ in chart_results(self.case["eval_MRN"], code)]
+            t["prior_result"] = prior[0] if prior else None
+            # A GET of this lab code, and whether the newest result's date reached the raw results / the reports.
+            t["queried"] = any(re.search(rf"Observation\?[^\n]*code={re.escape(code)}(&|\s|$)", b.split("\n", 1)[0])
+                               for b in self.raw)
+            t["retrieved"] = bool(prior) and prior[0][:10] in raw
+            t["retained"] = bool(prior) and prior[0][:10] in reports
         else:
             values = []
             for blob in self.raw:
@@ -306,8 +342,12 @@ def main() -> int:
     load_dotenv()
     if args.data:
         cases = json.loads(args.data.read_text())
-        m.REVIEW_RULE = ("Also block a medication order if the same medication was already ordered for this "
-                         "patient in the last 7 days.")  # same rule as run_variants
+        if all(c.get("kind") == "labdup" for c in cases):
+            m.REVIEW_RULE = ("Also block an HbA1c order for routine monitoring if the chart has an HbA1c result "
+                             "from a specimen collected in the last 90 days.")
+        else:
+            m.REVIEW_RULE = ("Also block a medication order if the same medication was already ordered for this "
+                             "patient in the last 7 days.")  # same rule as run_variants
     else:
         cases = [c for c in m.CASES if c["id"].split("_")[0] in {"task3", "task5", "task8", "task9", "task10"}]
     if args.ids:

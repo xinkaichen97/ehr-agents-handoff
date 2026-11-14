@@ -29,6 +29,7 @@ task, written as each task finishes.
 uv run python mab/build_duplicates.py                          # 60 duplicate-order tasks, with and without the policy
 uv run python mab/build_policy_rb.py                           # the same tasks with the chart's orders in the task
 uv run python mab/build_variants.py --out mab/variants_v1.json # 60 hazard variants, with and without the policy
+uv run python mab/build_labdups.py                             # 60 duplicate HbA1c tasks (second policy, 90 days)
 ```
 
 ## Reproduce the paper
@@ -39,13 +40,14 @@ Each script runs three repetitions unless noted. Run a one-task check first, for
 | Paper | Run | Summarize |
 |---|---|---|
 | Tables I and II: pipeline on the duplicate study | `scripts/run_e1.sh` | `mab/summarize_e1.py`, `mab/paths_e1.py`, `mab/risk_e1.py` |
-| Table III: single agent on the duplicate study | `scripts/run_cheap.sh` (no guard, policy, gate, Haiku auditor); `scripts/run_opus_dups.sh full` (Opus auditor); `mab/run_variants.py --arm none --data mab/duplicates_v1_policy_rb.json` (policy and chart) | `mab/summarize_dups.py` |
-| Table IV: pipeline against a single agent, 150 tasks | `scripts/run_e1.sh` (run 1), `scripts/run_e1_150.sh` (runs 2 and 3) | `mab/boot150.py` |
-| Table V: single-agent guards, 150 tasks | `scripts/run_one_arm.sh` per arm (below); Haiku-auditor rows in `scripts/run_cheap.sh` | `mab/summarize_arms.py`, `mab/free_checks.py` |
-| Table VI: cross-family reviewer replay | `mab/replay_mab.py` | `mab/replay_summary.py` |
+| Table III: second policy, duplicate HbA1c tests | `scripts/run_labs.sh` | `mab/summarize_labs.py` |
+| Table IV: single agent on the duplicate study | `scripts/run_cheap.sh` (no guard, policy, gate, Haiku auditor); `scripts/run_opus_dups.sh full` (Opus auditor); `mab/run_variants.py --arm none --data mab/duplicates_v1_policy_rb.json` (policy and chart) | `mab/summarize_dups.py` |
+| Table V: pipeline against a single agent, 150 tasks | `scripts/run_e1.sh` (run 1), `scripts/run_e1_150.sh` (runs 2 and 3) | `mab/boot150.py` |
+| Table VI: single-agent guards, 150 tasks | `scripts/run_one_arm.sh` per arm (below); Haiku-auditor rows in `scripts/run_cheap.sh` | `mab/summarize_arms.py`, `mab/free_checks.py` |
+| Cross-family reviewer replay (Section IV-G) | `mab/replay_mab.py` | `mab/replay_summary.py` |
 | Sonnet check on the hazard variants | `mab/run_variants.py --data mab/variants_v1.json` and `mab/variants_v1_nopolicy.json` | printed by the run |
 
-Table V arms, each with an Opus 5.5 auditor where one is used:
+Table VI arms, each with an Opus 5.5 auditor where one is used:
 
 ```bash
 for k in 1 2 3; do
