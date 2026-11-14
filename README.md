@@ -1,0 +1,78 @@
+# Policy Placement and Evidence Access in Multi-Agent EHR Workflows
+
+Code for the BioAgents 2026 workshop paper of the same name. It runs Claude, GPT and
+Gemini agents on [MedAgentBench](https://github.com/stanfordmlgroup/MedAgentBench)
+write tasks, with and without guards and in a four-agent pipeline, and grades them with
+the benchmark's own grader.
+
+This repository contains code and task generators only. It does not contain MedAgentBench
+patient records, its reference solutions, generated task files or run records. The
+generators rebuild the task files from your own MedAgentBench server; with the default
+seeds they reproduce the files used in the paper byte for byte.
+
+## Setup
+
+1. Clone MedAgentBench next to this repository (or set `MEDAGENTBENCH_DIR`) and start its
+   FHIR server as its README describes. The code expects the server at
+   `http://localhost:8080/fhir/`.
+2. Install [uv](https://docs.astral.sh/uv/), then run `uv sync`.
+3. Copy `.env.example` to `.env` and add your API keys. Agents and auditors need
+   `ANTHROPIC_API_KEY`; the cross-family replay also needs `OPENAI_API_KEY` and
+   `GEMINI_API_KEY`.
+
+Run every command from the repository root. Results go to `mab/runs/`, one JSON record per
+task, written as each task finishes.
+
+## Build the task sets
+
+```bash
+uv run python mab/build_duplicates.py                          # 60 duplicate-order tasks, with and without the policy
+uv run python mab/build_policy_rb.py                           # the same tasks with the chart's orders in the task
+uv run python mab/build_variants.py --out mab/variants_v1.json # 60 hazard variants, with and without the policy
+```
+
+## Reproduce the paper
+
+Each script runs three repetitions unless noted. Run a one-task check first, for example
+`--ids duplicate_1` or `--per-type 1`, and check its cost before a full run.
+
+| Paper | Run | Summarize |
+|---|---|---|
+| Tables I and II: pipeline on the duplicate study | `scripts/run_e1.sh` | `mab/summarize_e1.py`, `mab/paths_e1.py`, `mab/risk_e1.py` |
+| Table III: single agent on the duplicate study | `scripts/run_cheap.sh` (no guard, policy, gate, Haiku auditor); `scripts/run_opus_dups.sh full` (Opus auditor); `mab/run_variants.py --arm none --data mab/duplicates_v1_policy_rb.json` (policy and chart) | `mab/summarize_dups.py` |
+| Table IV: pipeline against a single agent, 150 tasks | `scripts/run_e1.sh` (run 1), `scripts/run_e1_150.sh` (runs 2 and 3) | `mab/boot150.py` |
+| Table V: single-agent guards, 150 tasks | `scripts/run_one_arm.sh` per arm (below); Haiku-auditor rows in `scripts/run_cheap.sh` | `mab/summarize_arms.py`, `mab/free_checks.py` |
+| Table VI: cross-family reviewer replay | `mab/replay_mab.py` | `mab/replay_summary.py` |
+| Sonnet check on the hazard variants | `mab/run_variants.py --data mab/variants_v1.json` and `mab/variants_v1_nopolicy.json` | printed by the run |
+
+Table V arms, each with an Opus 5.5 auditor where one is used:
+
+```bash
+for k in 1 2 3; do
+  scripts/run_one_arm.sh claude-haiku-5-5 haiku55 none          $k --arm none
+  scripts/run_one_arm.sh claude-haiku-5-5 haiku55 prompt        $k --arm prompt
+  scripts/run_one_arm.sh claude-haiku-5-5 haiku55 gate_alone    $k --arm gate --no-rules
+  scripts/run_one_arm.sh claude-haiku-5-5 haiku55 gate_rules    $k --arm gate
+  scripts/run_one_arm.sh claude-haiku-5-5 haiku55 auditor_alone $k --arm auditor --no-rules
+  scripts/run_one_arm.sh claude-haiku-5-5 haiku55 auditor_rules $k --arm auditor
+done
+```
+
+The Sonnet 5.5 reference row: `scripts/run_one_arm.sh claude-sonnet-5-5 sonnet55 none 1 --arm none`.
+
+`MAB_AUDITOR_MODEL` selects the auditor and verifier model (default `claude-opus-5-5`).
+`mab/summarize_arms.py` takes the agent's input and output price per million tokens.
+
+## Notes
+
+- `mab/run_mab.py` reproduces the benchmark's prompt, actions and 8-round limit without the
+  AgentBench controller, and grades with MedAgentBench's grader loaded from your clone.
+- The gate's checks come only from the published function definitions, not from the grader.
+- The replay resends the review prompts stored in your own run records; it needs those
+  records and sends their contents to the OpenAI and Gemini APIs.
+- Model API costs in the paper are measured from the run records' token counts and list
+  prices.
+
+## License
+
+MIT. MedAgentBench and its data are under their own license.

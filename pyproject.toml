@@ -1,0 +1,14 @@
+[project]
+name = "policy-placement-mab"
+version = "0.1.0"
+description = "Policy placement and evidence access in multi-agent EHR workflows (MedAgentBench)"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic==0.101.0",
+    "openai==2.36.0",
+    "python-dotenv==1.2.2",
+    "requests==2.33.1",  # MedAgentBench's grader
+]
+
+[tool.uv]
+package = false
