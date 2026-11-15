@@ -263,17 +263,24 @@ def duplicate_violation(url: str, payload: object) -> str | None:
 
 
 def _parse_verdict(reply: str) -> dict:
-    """First JSON object with a decision; text before it may contain braces such as {api_base}."""
+    """Last JSON object with a decision; text before it may contain braces such as {api_base}.
+
+    The last one, because a reviewer sometimes writes a verdict, notices that its reason contradicts
+    it, and appends a corrected verdict (seen with Sonnet 5.5).
+    """
     decoder = json.JSONDecoder()
+    found = None
     for i, ch in enumerate(reply):
         if ch == "{":
             try:
                 obj, _ = decoder.raw_decode(reply[i:])
             except ValueError:
                 continue
-            if isinstance(obj, dict) and "decision" in obj:
-                return obj
-    raise ValueError(f"no verdict in reply: {reply[:500]!r}")
+            if isinstance(obj, dict) and obj.get("decision") in ("allow", "block"):
+                found = obj
+    if found is None:
+        raise ValueError(f"no verdict in reply: {reply[:500]!r}")
+    return found
 
 
 def auditor_review(

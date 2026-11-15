@@ -205,7 +205,7 @@ class Pipeline:
             self.events.append({"action": r[:300], "decision": "review_error", "reason": repr(exc)})
             return None
         self.events.append({"action": r[:300], "decision": verdict.get("decision"),
-                            "reason": verdict.get("reason"), "prompt": prompt})
+                            "reason": verdict.get("reason"), "prompt": prompt, "reply": reply})
         return verdict.get("reason") if verdict.get("decision") == "block" else None
 
     def _post(self, r: str) -> str:
