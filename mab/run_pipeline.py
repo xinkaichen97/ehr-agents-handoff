@@ -3,11 +3,13 @@
 orchestrator  sees the task and the sub-agents' reports, never the record; replies READ: / WRITE: / FINISH(...)
 reader        GET only; ends with REPORT: <summary>
 writer        POST only; ends with DONE: <note>; every POST goes through the verifier
-verifier      optional LLM reviewer on each POST (not on FINISH), as in run_mab.auditor_review
+verifier      optional LLM reviewer on each POST, as in run_mab.auditor_review; with --review-finish
+              it also reviews the orchestrator's FINISH, as the single-agent auditor does
 
 Handoff conditions (--handoff), i.e. what the writer and the verifier receive:
   summary      the reader's reports
   full         the reports plus the raw records the reader retrieved
+  raw_verifier the reports; the verifier also gets the raw records the reader retrieved
   rb_verifier  the reports; the verifier also gets the chart's medication orders (source read-back)
   rb_writer    the reports; the writer also gets the chart's medication orders
 
@@ -132,8 +134,10 @@ def _clean(text: str) -> str:
 
 
 class Pipeline:
-    def __init__(self, chat, verifier, handoff: str, case: dict, policy_scope: str = "all") -> None:
+    def __init__(self, chat, verifier, handoff: str, case: dict, policy_scope: str = "all",
+                 review_finish: bool = False) -> None:
         self.chat, self.verifier, self.handoff, self.case = chat, verifier, handoff, case
+        self.review_finish = review_finish
         self.policy_scope = policy_scope
         self.env = m.Result()  # flattened record actions, for the grader
         self.env.history.append(
@@ -159,7 +163,7 @@ class Pipeline:
 
     def _evidence(self, for_writer: bool) -> str:
         text = self._summary()
-        if self.handoff == "full":
+        if self.handoff == "full" or (self.handoff == "raw_verifier" and not for_writer):
             text += "\n\nRecords the reader retrieved:\n" + ("\n".join(self.raw) or "none")
         if (self.handoff == "rb_writer" and for_writer) or (self.handoff == "rb_verifier" and not for_writer):
             if self.case.get("kind") == "labdup":
@@ -192,7 +196,7 @@ class Pipeline:
         prompt = VERIFIER_PROMPT.format(
             context=self.case["context"], question=self.case["instruction"],
             evidence=self._evidence(for_writer=False), writes="\n".join(self.writes) or "none",
-            action=r, api_base=m.API_BASE,
+            action=r if r.startswith("POST") else "FINISH (end the task)", api_base=m.API_BASE,
         )
         earlier = [f"{e['action'][:200]} -> blocked: {e['reason']}" for e in self.events if e["decision"] == "block"]
         if earlier:
@@ -274,6 +278,13 @@ class Pipeline:
             elif r.startswith("WRITE:"):
                 note = f"Writer report: {self._sub('writer', r[6:].strip())}"
             elif r.startswith("FINISH("):
+                reason = self._verify(r) if self.review_finish else None
+                if reason:
+                    self.env.history += [m.Turn("agent", r, blocked=True),
+                                         m.Turn("user", f"FINISH was blocked by review: {reason}", blocked=True)]
+                    msgs.append({"role": "user", "content": f"FINISH was blocked by review: {reason}\n"
+                                                            f"Record actions left: {m.MAX_ROUND - self.actions}"})
+                    continue
                 self.env.history.append(m.Turn("agent", r))
                 self.env.result, self.env.status = r[len("FINISH("):-1], "completed"
                 break
@@ -329,16 +340,19 @@ class Pipeline:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="claude-haiku-5-5")
-    ap.add_argument("--handoff", choices=["summary", "full", "rb_verifier", "rb_writer"], required=True)
+    ap.add_argument("--handoff", choices=["summary", "full", "raw_verifier", "rb_verifier", "rb_writer"], required=True)
     ap.add_argument("--verifier", choices=["none", "auditor"], default="none")
+    ap.add_argument("--review-finish", action="store_true", help="the verifier also reviews FINISH")
     ap.add_argument("--policy-scope", choices=["all", "writer"], default="all")
     ap.add_argument("--data", type=Path, help="duplicate-study JSON; default: the 150 MedAgentBench write tasks")
     ap.add_argument("--ids", default="")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
-    if args.handoff == "rb_verifier" and args.verifier == "none":
-        ap.error("rb_verifier needs a verifier")
+    if args.handoff in ("rb_verifier", "raw_verifier") and args.verifier == "none":
+        ap.error(f"{args.handoff} needs a verifier")
+    if args.review_finish and args.verifier == "none":
+        ap.error("--review-finish needs a verifier")
     load_dotenv()
     if args.data:
         cases = json.loads(args.data.read_text())
@@ -360,7 +374,7 @@ def main() -> int:
         path = args.out / f"{case['id']}.json"
         if path.exists():
             return
-        p = Pipeline(chat, verifier, args.handoff, case, args.policy_scope)
+        p = Pipeline(chat, verifier, args.handoff, case, args.policy_scope, args.review_finish)
         p.run()
         graded = m.Result(history=[t for t in p.env.history if not t.blocked], result=p.env.result, status=p.env.status)
         if args.data:
@@ -370,6 +384,7 @@ def main() -> int:
         path.write_text(json.dumps({
             "id": case["id"], "kind": case.get("kind"), "expect": case.get("expect"), "model": args.model,
             "handoff": args.handoff, "verifier": args.verifier, "policy_scope": args.policy_scope,
+            "review_finish": args.review_finish,
             "auditor_model": verifier.model if verifier else None,
             "status": p.env.status, "result": p.env.result, "correct": correct, "outcome": outcome,
             "usage": p.usage, "guard_events": p.events, "trace": p.trace(),
@@ -380,7 +395,7 @@ def main() -> int:
         for future in concurrent.futures.as_completed([pool.submit(one, c) for c in cases]):
             future.result()
     records = [json.loads((args.out / f"{c['id']}.json").read_text()) for c in cases]
-    print(f"{args.model} [{args.handoff}, verifier={args.verifier}, policy={args.policy_scope}]: "
+    print(f"{args.model} [{args.handoff}, verifier={args.verifier}, policy={args.policy_scope}, finish={args.review_finish}]: "
           f"{sum(r['correct'] for r in records)}/{len(records)} correct")
     return 0
 
