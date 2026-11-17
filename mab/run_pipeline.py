@@ -348,7 +348,11 @@ def main() -> int:
     ap.add_argument("--ids", default="")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--budget", type=int, default=0, help="record actions and orchestrator turns (default: the benchmark's 8)")
     args = ap.parse_args()
+    if args.budget:
+        global ORCH_TURNS
+        m.MAX_ROUND = ORCH_TURNS = args.budget
     if args.handoff in ("rb_verifier", "raw_verifier") and args.verifier == "none":
         ap.error(f"{args.handoff} needs a verifier")
     if args.review_finish and args.verifier == "none":
@@ -384,7 +388,7 @@ def main() -> int:
         path.write_text(json.dumps({
             "id": case["id"], "kind": case.get("kind"), "expect": case.get("expect"), "model": args.model,
             "handoff": args.handoff, "verifier": args.verifier, "policy_scope": args.policy_scope,
-            "review_finish": args.review_finish,
+            "review_finish": args.review_finish, "budget": m.MAX_ROUND,
             "auditor_model": verifier.model if verifier else None,
             "status": p.env.status, "result": p.env.result, "correct": correct, "outcome": outcome,
             "usage": p.usage, "guard_events": p.events, "trace": p.trace(),

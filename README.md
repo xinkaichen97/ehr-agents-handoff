@@ -47,6 +47,8 @@ Each script runs three repetitions unless noted. Run a one-task check first, for
 | Table VI: single-agent rows and guards (Section IV-G) | `scripts/run_one_arm.sh` per arm (below); Haiku-auditor row in `scripts/run_cheap.sh` | `mab/summarize_arms.py`, `mab/free_checks.py` |
 | 150 read-only tasks and the 300-task totals (Section IV-G) | `scripts/run_read.sh` | printed by each run |
 | Cross-family reviewer replay (Section IV-G) | `mab/replay_mab.py` | `mab/replay_summary.py` |
+| Larger action budget (16) for the two verifier conditions without the order list (Section IV-B) | `scripts/run_budget16.sh 1`, `2`, `3` | `mab/summarize_e1.py mab/runs/budget16/haiku55` |
+| Reviews with more than one decision: resend saved Haiku or Opus review prompts | `mab/check_verdicts.py --model claude-haiku-5-5 --out mab/runs/verdict_check/haiku.jsonl` | printed by the run |
 | Sonnet check on the hazard variants | `mab/run_variants.py --data mab/variants_v1.json` and `mab/variants_v1_nopolicy.json` | printed by the run |
 
 Single-agent arms in Table VI (no guard, prompt rules, gate, Opus 5.5 auditor):
@@ -68,7 +70,7 @@ done
 - `mab/run_mab.py` reproduces the benchmark's prompt, actions and 8-round limit without the
   AgentBench controller, and grades with MedAgentBench's grader loaded from your clone.
 - The gate's checks come only from the published function definitions, not from the grader.
-- Reviews are parsed from the last JSON verdict in the reply. Sonnet 5.5 sometimes wrote a verdict,
+- Reviews are parsed from the last JSON verdict in the reply; if the JSON is invalid (for example, unescaped quotes in the reason), the last `"decision"` field is read directly. Sonnet 5.5 sometimes wrote a verdict,
   then a corrected one; earlier runs read the first verdict (see Section IV-D of the paper).
   `mab/run_pipeline.py` saves each verifier's raw reply.
 - `mab/run_pipeline.py --review-finish` lets the verifier also review the orchestrator's final

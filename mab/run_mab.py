@@ -279,7 +279,12 @@ def _parse_verdict(reply: str) -> dict:
             if isinstance(obj, dict) and obj.get("decision") in ("allow", "block"):
                 found = obj
     if found is None:
-        raise ValueError(f"no verdict in reply: {reply[:500]!r}")
+        # Invalid JSON, such as unescaped quotes inside the reason: read the last decision field directly.
+        hits = list(re.finditer(r'"decision"\s*:\s*"(allow|block)"', reply))
+        if not hits:
+            raise ValueError(f"no verdict in reply: {reply[:500]!r}")
+        reason = re.search(r'"reason"\s*:\s*"(.*)', reply[hits[-1].start():], re.S)
+        found = {"decision": hits[-1].group(1), "reason": reason.group(1).rstrip('"}\n ') if reason else ""}
     return found
 
 
