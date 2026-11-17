@@ -22,8 +22,10 @@ from paths_e1 import med_get  # noqa: E402
 from summarize_e1 import CASES, accepted  # noqa: E402
 
 HIGH = {"RIVAROXABAN", "TACROLIMUS", "AZATHIOPRINE"}
-# Benzonatate, tamsulosin, nortriptyline and topiramate moved to moderate after Codex review.
-LOW = {"ASCORBIC ACID", "MELATONIN", "LIPITOR", "SERTRALINE", "MIRTAZAPINE"}
+# Tamsulosin, nortriptyline and topiramate moved to moderate after Codex review. After clinical
+# review: benzonatate to low (2 x 100 mg is within the 200 mg single-dose limit) and
+# atorvastatin (Lipitor) to moderate (2 x 80 mg is twice the 80 mg daily maximum).
+LOW = {"ASCORBIC ACID", "MELATONIN", "SERTRALINE", "MIRTAZAPINE", "BENZONATATE"}
 HERE = Path(__file__).parent
 
 

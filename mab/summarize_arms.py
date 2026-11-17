@@ -1,7 +1,7 @@
 """Summarize guard arms across runs, with completeness checks.
 
 Usage:
-    uv run python mab/summarize_arms.py mab/runs/full/haiku55 [input $/1M] [output $/1M]
+    uv run python mab/summarize_arms.py mab/runs/full/haiku55 <input $/1M> <output $/1M>
 """
 
 from __future__ import annotations
