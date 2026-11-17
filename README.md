@@ -41,7 +41,7 @@ Each script runs three repetitions unless noted. Run a one-task check first, for
 |---|---|---|
 | Tables I and II: pipeline on the duplicate study | `scripts/run_e1.sh` | `mab/summarize_e1.py`, `mab/paths_e1.py`, `mab/risk_e1.py` |
 | Table III: second policy, duplicate HbA1c tests | `scripts/run_labs.sh` | `mab/summarize_labs.py` |
-| Table IV: Sonnet 5.5 for every agent (one run) | `scripts/run_sonnet.sh` | `mab/summarize_e1.py` and `mab/paths_e1.py` on the `w_*` conditions, `mab/summarize_labs.py` on the `lab_*` conditions; `single_rb` is printed by the run |
+| Table IV: Sonnet 5.5 for every agent | `scripts/run_sonnet.sh` (run 1, all seven conditions); `scripts/run_sonnet_more.sh 2` and `3` (runs 2 and 3, all but summary with a verifier) | `mab/summarize_e1.py` and `mab/paths_e1.py` on the `w_*` conditions, `mab/summarize_labs.py` on the `lab_*` conditions; `single_rb` is printed by the run |
 | Table V: single agent on the duplicate study | `scripts/run_cheap.sh` (no guard, policy, gate, Haiku auditor); `scripts/run_opus_dups.sh full` (Opus auditor); `mab/run_variants.py --arm none --data mab/duplicates_v1_policy_rb.json` (policy and chart) | `mab/summarize_dups.py` |
 | Table VI: pipeline rows, 150 tasks | `scripts/run_e1.sh` (run 1), `scripts/run_e1_150.sh` (runs 2 and 3); `scripts/run_opusver.sh` (Opus verifier row); `scripts/run_factorial.sh` (FINISH review, raw records to the verifier, both) | `mab/boot150.py`; `mab/writes150.py` (Writes column); the Opus-verifier runs print their totals |
 | Table VI: single-agent rows and guards (Section IV-G) | `scripts/run_one_arm.sh` per arm (below); Haiku-auditor row in `scripts/run_cheap.sh` | `mab/summarize_arms.py`, `mab/free_checks.py` |
