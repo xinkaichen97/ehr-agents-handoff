@@ -1,4 +1,4 @@
-# Policy Placement and Evidence Access in Multi-Agent EHR Workflows
+# Evidence Access and Policy Placement in Multi-Agent EHR Workflows
 
 Code for the BioAgents 2026 workshop paper of the same name. It runs Claude agents on
 [MedAgentBench](https://github.com/stanfordmlgroup/MedAgentBench) write tasks, with and
