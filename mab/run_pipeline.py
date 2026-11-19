@@ -16,6 +16,8 @@ Handoff conditions (--handoff), i.e. what the writer and the verifier receive:
 Policy scope (--policy-scope), for duplicate-study data whose context ends with "Site policy: ...":
   all          every agent sees the policy (the orchestrator can decide on its own)
   writer       only the writer and the verifier see it (the agent that writes owns the write policy)
+  route        every agent sees it, but the orchestrator must pass a requested write to the writer
+               and leave the decision to the writer and verifier (separates who knows from who decides)
 
 All agents share one budget of MAX_ROUND record actions (GET or POST attempt). The official
 grader (150 tasks) or run_variants.grade_variant (duplicate study) grades the flattened action
@@ -43,13 +45,15 @@ import run_mab as m  # noqa: E402
 import run_variants as v  # noqa: E402
 
 ORCH_TURNS = 8
+ROUTE_RULE = ("Do not decide yourself whether a requested write should be made. If the question asks for a write, "
+              "send it to the writer with WRITE:; the writer applies the site policy and decides.\n")
 SUB_TURNS = 6  # replies per delegation, including the final REPORT/DONE
 
 ORCH_PROMPT = """You coordinate two assistants who work in a patient's electronic health record. You cannot access the record yourself.
 - The reader retrieves data and reports back to you.
 - The writer makes changes to the record (orders, notes).
 Do only what the context and the question ask for; do not add checks or steps they do not ask for.
-Reply with exactly one of these, and nothing else:
+{route}Reply with exactly one of these, and nothing else:
 READ: <what the reader should look up>
 WRITE: <what the writer should write, with the details it needs>
 FINISH([answer1, answer2, ...])   (the final answer to the question; the list must be JSON loadable)
@@ -266,7 +270,8 @@ class Pipeline:
 
     def run(self) -> None:
         msgs = [{"role": "user", "content": ORCH_PROMPT.format(context=self._context("orchestrator"),
-                                                               question=self.case["instruction"])}]
+                                                               question=self.case["instruction"],
+                                                               route=ROUTE_RULE if self.policy_scope == "route" else "")}]
         for _ in range(ORCH_TURNS):
             reply = self.chat(msgs, self.usage["orchestrator"])
             msgs.append({"role": "assistant", "content": reply})
@@ -343,7 +348,7 @@ def main() -> int:
     ap.add_argument("--handoff", choices=["summary", "full", "raw_verifier", "rb_verifier", "rb_writer"], required=True)
     ap.add_argument("--verifier", choices=["none", "auditor"], default="none")
     ap.add_argument("--review-finish", action="store_true", help="the verifier also reviews FINISH")
-    ap.add_argument("--policy-scope", choices=["all", "writer"], default="all")
+    ap.add_argument("--policy-scope", choices=["all", "writer", "route"], default="all")
     ap.add_argument("--data", type=Path, help="duplicate-study JSON; default: the 150 MedAgentBench write tasks")
     ap.add_argument("--ids", default="")
     ap.add_argument("--workers", type=int, default=4)

@@ -154,11 +154,16 @@ class Chat:
         kwargs = {"system": system} if system else {}
         if self.effort:
             kwargs["extra_body"] = {"output_config": {"effort": self.effort}}
+        if self.model.startswith("claude-sonnet"):
+            kwargs["cache_control"] = {"type": "ephemeral"}  # automatic caching of the growing history
         reply = self.anthropic.messages.create(
             model=self.model, max_tokens=8192, messages=messages, **kwargs
         )
         usage["input_tokens"] = usage.get("input_tokens", 0) + reply.usage.input_tokens
         usage["output_tokens"] = usage.get("output_tokens", 0) + reply.usage.output_tokens
+        for k in ("cache_creation_input_tokens", "cache_read_input_tokens"):  # input_tokens excludes these
+            if getattr(reply.usage, k, None):
+                usage[k] = usage.get(k, 0) + getattr(reply.usage, k)
         return "".join(b.text for b in reply.content if b.type == "text")
 
     def _openai(self, messages, usage, system) -> str:
